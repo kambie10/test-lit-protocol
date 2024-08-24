@@ -1,14 +1,20 @@
 {
   "name": "test-lit-protocol",
   "version": "1.0.0",
-  "main": "connect.js",
+  "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "npx @dotenvx/dotenvx run -- node index.js"
   },
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@lit-protocol/lit-node-client": "^6.4.5"
+    "@dotenvx/dotenvx": "^1.10.2",
+    "@lit-protocol/auth-helpers": "^6.4.7",
+    "@lit-protocol/constants": "^6.4.7",
+    "@lit-protocol/contracts-sdk": "^6.4.7",
+    "@lit-protocol/lit-node-client-nodejs": "^6.4.7",
+    "ethers": "^5.7.2"
   }
 }
