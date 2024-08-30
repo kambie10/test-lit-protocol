@@ -14,6 +14,7 @@
     "@lit-protocol/auth-helpers": "^6.4.7",
     "@lit-protocol/constants": "^6.4.7",
     "@lit-protocol/contracts-sdk": "^6.4.7",
+    "@lit-protocol/lit-auth-client": "^6.4.10",
     "@lit-protocol/lit-node-client-nodejs": "^6.4.7",
     "ethers": "^5.7.2"
   }

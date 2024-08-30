@@ -1,11 +1,14 @@
 const { LitNodeClientNodeJs } = require('@lit-protocol/lit-node-client-nodejs');
-const { LitNetwork, LIT_RPC } = require('@lit-protocol/constants');
+const { LitNetwork, LIT_RPC, AuthMethodType } = require('@lit-protocol/constants');
 const { 
   providers : ethersProviders,
   utils : ethersUtils,
   Wallet,
+  BigNumber,
  } = require("ethers");
 const { LitContracts } = require("@lit-protocol/contracts-sdk");  
+const { LitAuthClient } = require("@lit-protocol/lit-auth-client");
+
 const {
   createSiweMessageWithRecaps,
   generateAuthSig,
@@ -15,25 +18,31 @@ const {
   LitPKPResource,
 } = require("@lit-protocol/auth-helpers");
 
+// const litActionCode = `
+// (async () => {
+//   // test an access control condition
+//   const testResult = await Lit.Actions.checkConditions({
+//     conditions,
+//     authSig,
+//     chain,
+//   });
+
+//   if (!testResult) {
+//     LitActions.setResponse({ response: "address does not have 1 or more Wei on Ethereum Mainnet" });
+//     return
+//   }
+
+//   const sigShare = await LitActions.signEcdsa({
+//     toSign: dataToSign,
+//     publicKey,
+//     sigName: "sig",
+//   });
+// })();
+// `;
+
 const litActionCode = `
 (async () => {
-  // test an access control condition
-  const testResult = await Lit.Actions.checkConditions({
-    conditions,
-    authSig,
-    chain,
-  });
-
-  if (!testResult) {
-    LitActions.setResponse({ response: "address does not have 1 or more Wei on Ethereum Mainnet" });
-    return
-  }
-
-  const sigShare = await LitActions.signEcdsa({
-    toSign: dataToSign,
-    publicKey,
-    sigName: "sig",
-  });
+  await Lit.Actions.claimKey({keyId: userId});
 })();
 `;
 
@@ -49,33 +58,79 @@ const litActionCode = `
     const authSig = await genAuthSig(litNodeClient, wallet);
     console.log("Got Auth Sig for Lit Action conditional check!", authSig);
 
-    const litActionSignatures = await litNodeClient.executeJs({
+    // const litActionSignatures = await litNodeClient.executeJs({
+    //   sessionSigs,
+    //   code: litActionCode,
+    //   jsParams: {
+    //     conditions: [
+    //       {
+    //         conditionType: "evmBasic",
+    //         contractAddress: "",
+    //         standardContractType: "",
+    //         chain: "ethereum",
+    //         method: "eth_getBalance",
+    //         parameters: [":userAddress", "latest"],
+    //         returnValueTest: {
+    //           comparator: ">=",
+    //           value: "1",
+    //         },
+    //       },
+    //     ],
+    //     authSig,
+    //     chain: "ethereum",
+    //     dataToSign: ethersUtils.arrayify(
+    //       ethersUtils.keccak256([1, 2, 3, 4, 5])
+    //     ),
+    //     publicKey: await getPkpPublicKey(wallet),
+    //   },
+    // });
+    const res = await litNodeClient.executeJs({
       sessionSigs,
       code: litActionCode,
       jsParams: {
-        conditions: [
-          {
-            conditionType: "evmBasic",
-            contractAddress: "",
-            standardContractType: "",
-            chain: "ethereum",
-            method: "eth_getBalance",
-            parameters: [":userAddress", "latest"],
-            returnValueTest: {
-              comparator: ">=",
-              value: "1",
-            },
-          },
-        ],
-        authSig,
-        chain: "ethereum",
-        dataToSign: ethersUtils.arrayify(
-          ethersUtils.keccak256([1, 2, 3, 4, 5])
-        ),
-        publicKey: await getPkpPublicKey(wallet),
+        userId: 'foo'
       },
     });
-    console.log("litActionSignatures", litActionSignatures);
+  
+    console.log("litActionSignatures", res);
+
+    const authMethod = {
+      authMethodType: AuthMethodType.EthWallet,
+      accessToken: JSON.stringify(authSig),
+    };
+  
+    const authMethodId = await LitAuthClient.getAuthIdByAuthMethod(authMethod);
+
+    console.log("🔄 Connecting LitContracts client to network...");
+    const litContracts = new LitContracts({
+      signer: wallet,
+      network: LitNetwork.Datil,
+      debug: false,
+    });
+    await litContracts.connect();
+    console.log("✅ Connected LitContracts client to network");
+
+    let tx = await litContracts.pkpHelperContract.write.claimAndMintNextAndAddAuthMethods(
+      {
+        keyType: 2,
+        derivedKeyId: `0x${res.claims['foo'].derivedKeyId}`,
+        signatures: res.claims['foo'].signatures,
+      },
+     {
+      keyType: 2,
+      permittedIpfsCIDs: [],
+      permittedIpfsCIDScopes: [],
+      permittedAddresses: [],
+      permittedAddressScopes: [],
+      permittedAuthMethodTypes: [AuthMethodType.EthWallet],
+      permittedAuthMethodIds: [authMethodId],
+      permittedAuthMethodPubkeys: [`0x`],
+      permittedAuthMethodScopes: [[BigNumber.from("2")]],
+      addPkpEthAddressAsPermittedAddress: true,
+      sendPkpToItself: true
+     });
+  
+     console.log("tx", tx);
 
   } catch (e) {
     console.log(e);
