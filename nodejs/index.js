@@ -104,7 +104,7 @@ const litActionCode = `
     console.log("🔄 Connecting LitContracts client to network...");
     const litContracts = new LitContracts({
       signer: wallet,
-      network: LitNetwork.Datil,
+      network: LitNetwork.DatilDev,
       debug: false,
     });
     await litContracts.connect();
@@ -128,7 +128,7 @@ const litActionCode = `
       permittedAuthMethodScopes: [[BigNumber.from("2")]],
       addPkpEthAddressAsPermittedAddress: true,
       sendPkpToItself: true
-     });
+     }, { gasLimit: 1000000 });
   
      console.log("tx", tx);
 
