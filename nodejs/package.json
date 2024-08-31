@@ -16,6 +16,9 @@
     "@lit-protocol/contracts-sdk": "^6.4.7",
     "@lit-protocol/lit-auth-client": "^6.4.10",
     "@lit-protocol/lit-node-client-nodejs": "^6.4.7",
-    "ethers": "^5.7.2"
+    "base58-js": "^2.0.0",
+    "esbuild-plugin-polyfill-node": "^0.3.0",
+    "ethers": "^5.7.2",
+    "pinata": "^0.4.0"
   }
 }

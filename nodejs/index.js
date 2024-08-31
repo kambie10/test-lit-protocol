@@ -8,6 +8,8 @@ const {
  } = require("ethers");
 const { LitContracts } = require("@lit-protocol/contracts-sdk");  
 const { LitAuthClient } = require("@lit-protocol/lit-auth-client");
+const fs = require("fs")
+const { PinataSDK } = require("pinata")
 
 const {
   createSiweMessageWithRecaps,
@@ -17,65 +19,30 @@ const {
   LitActionResource,
   LitPKPResource,
 } = require("@lit-protocol/auth-helpers");
+const { Blob } = require('buffer');
 
 (async () => {
-  let litNodeClient
   try {
-    const wallet = getWallet();
-    litNodeClient = await getLitNodeClient();
+  const { base58_to_binary, binary_to_base58 } = await import("base58-js")
 
+    const wallet = getWallet();
     const litContracts = await getLitContracts(wallet)
 
-    const authSig = await genAuthSig(litNodeClient, wallet);
-    console.log("Got Auth Sig for Lit Action conditional check!", authSig);
+    const litActionCode = fs
+    .readFileSync("./delegationAction/bundled.js")
+    .toString()
 
-    const authMethod = {
-      authMethodType: AuthMethodType.EthWallet,
-      accessToken: JSON.stringify(authSig),
-    };
-    
-    const pkp = await mintPkp(litContracts, authMethod);
+    const uploadRes = await uploadLitAction(litActionCode)
 
-    console.log("Got PKP Public Key!", pkp);
+    console.log("uploadRes:", uploadRes)
 
-    console.log("🔄 Minting Capacity Credits NFT...");
-    const capacityTokenId = (
-      await litContracts.mintCapacityCreditsNFT({
-        requestsPerKilosecond: 10,
-        daysUntilUTCMidnightExpiration: 1,
-      })
-    ).capacityTokenIdStr;
-    console.log(`✅ Minted new Capacity Credit with ID: ${capacityTokenId}`);
+    const ipfsCid = uploadRes.IpfsHash
+    const ipfsCidBytes = base58_to_binary(ipfsCid)
+    console.log("uploadRes:", uploadRes, ipfsCidBytes)
 
-    console.log("🔄 Creating capacityDelegationAuthSig...");
-    const { capacityDelegationAuthSig } =
-      await litNodeClient.createCapacityDelegationAuthSig({
-        dAppOwnerWallet: wallet,
-        capacityTokenId,
-        delegateeAddresses: [pkp.ethAddress],
-        uses: "1",
-      });
-    console.log(`✅ Created the capacityDelegationAuthSig`, capacityDelegationAuthSig);
-
-    const sessionSignatures = await litNodeClient.getPkpSessionSigs({
-      pkpPublicKey: pkp.publicKey,
-      capabilityAuthSigs: [capacityDelegationAuthSig],
-      authMethods: [authMethod],
-      resourceAbilityRequests: [
-          {
-            resource: new LitPKPResource("*"),
-            ability: LitAbility.PKPSigning,
-          },
-      ],
-      expiration: new Date(Date.now() + 1000 * 60 * 10).toISOString(), // 10 minutes
-  });
-
-    console.log("Got Session Signatures!", sessionSignatures);
 
   } catch (e) {
     console.log(e);
-  } finally {
-    litNodeClient.disconnect();
   }
 })();
 
@@ -99,18 +66,6 @@ function getWallet(privateKey) {
   );
 }
 
-async function getLitNodeClient() {
-  const litNodeClient = new LitNodeClientNodeJs({
-    litNetwork: LitNetwork.DatilDev,
-  });
-
-  console.log("Connecting litNodeClient to network...");
-  await litNodeClient.connect();
-
-  console.log("litNodeClient connected!");
-  return litNodeClient;
-}
-
 async function getLitContracts(signer) {
   const litContracts = new LitContracts({
     signer,
@@ -124,30 +79,17 @@ async function getLitContracts(signer) {
   return litContracts
 }
 
-async function genAuthSig(litNodeClient, ethersSigner) {
-  const toSign = await createSiweMessageWithRecaps({
-    uri: "http://localhost",
-    expiration: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(), // 24 hours
-    walletAddress: await ethersSigner.getAddress(),
-    nonce: await litNodeClient.getLatestBlockhash(),
-    litNodeClient: litNodeClient,
-  });
-
-  return await generateAuthSig({
-    signer: ethersSigner,
-    toSign,
-  });
-}
-
-async function mintPkp(litContracts, authMethod) {
-  console.log("Minting new PKP...");
-  const mintInfo = await litContracts.mintWithAuth({
-    authMethod: authMethod,
-    scopes: [
-        AuthMethodScope.SignAnything, 
-        AuthMethodScope.PersonalSign
-      ],
-  });
-
-  return mintInfo.pkp
+async function uploadLitAction(code) {
+  try {
+    const pinata = new PinataSDK({
+      pinataJwt: process.env.PINATA_JWT,
+      pinataGateway: process.env.PINATA_GATEWAY,
+    });
+    const blob = new Blob([code]);
+    const file = new File([blob], "bundled", { type: "text/plain" });
+    const upload = await pinata.upload.file(file);
+    return upload
+  } catch (error) {
+    console.log(error);
+  }
 }
